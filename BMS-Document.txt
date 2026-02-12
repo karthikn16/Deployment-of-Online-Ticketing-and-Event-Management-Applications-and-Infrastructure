@@ -813,7 +813,5 @@ Lets add another dashboard for Jenkins;
 (URL: https://grafana.com/grafana/dashboards/9964-jenkins-performance-and-health-overview/)
 
 Click on Dashboards in the left pane, you can see both the dashboards you have just added.
-
-
 Final:
 Delete all the resources created
