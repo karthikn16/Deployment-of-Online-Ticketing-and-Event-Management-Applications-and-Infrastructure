@@ -1,35 +1,47 @@
-(without K8S Stage)
 pipeline {
     agent any
+
     tools {
         jdk 'jdk17'
         nodejs 'node23'
     }
+
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
+        IMAGE_NAME   = "karthikn16/bms"
+        IMAGE_TAG    = "latest"
+        CONTAINER_NAME = "bms"
     }
+
     stages {
+
         stage('Clean Workspace') {
             steps {
                 cleanWs()
             }
         }
+
         stage('Checkout from Git') {
             steps {
-                git branch: 'main', url: 'https://github.com/karthikn16/Deployment-of-Online-Ticketing-and-Event-Management-Applications-and-Infrastructure.git'
-                sh 'ls -la'  // Verify files after checkout
+                git branch: 'main',
+                    url: 'https://github.com/karthikn16/Deployment-of-Online-Ticketing-and-Event-Management-Applications-and-Infrastructure.git'
+
+                sh 'ls -la'
             }
         }
+
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar-server') {
-                    sh ''' 
-                    $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=BMS \
-                    -Dsonar.projectKey=BMS 
+                    sh '''
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=BMS \
+                        -Dsonar.projectKey=BMS
                     '''
                 }
             }
         }
+
         stage('Quality Gate') {
             steps {
                 script {
@@ -37,74 +49,127 @@ pipeline {
                 }
             }
         }
+
         stage('Install Dependencies') {
             steps {
                 sh '''
-                cd bookmyshow-app
-                ls -la  # Verify package.json exists
-                if [ -f package.json ]; then
-                    rm -rf node_modules package-lock.json  # Remove old dependencies
-                    npm install  # Install fresh dependencies
-                else
-                    echo "Error: package.json not found in bookmyshow-app!"
-                    exit 1
-                fi
+                    cd bookmyshow-app
+                    ls -la
+
+                    if [ -f package.json ]; then
+                        rm -rf node_modules package-lock.json
+                        npm install
+                    else
+                        echo "Error: package.json not found!"
+                        exit 1
+                    fi
                 '''
             }
         }
-        stage('OWASP FS Scan') {
+
+        stage('OWASP Dependency Check') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+                echo "Running OWASP Dependency Check..."
+
+                dependencyCheck additionalArguments: '''
+                    --scan ./ 
+                    --disableYarnAudit 
+                    --disableNodeAudit 
+                    --noupdate
+                ''', odcInstallation: 'DP-Check'
+
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
+
         stage('Trivy FS Scan') {
             steps {
-                sh 'trivy fs . > trivyfs.txt'
+                sh '''
+                    echo "Running Trivy FileSystem Scan..."
+                    trivy fs . --scanners vuln --format table > trivyfs.txt
+                    echo "Trivy FS Scan Completed!"
+                '''
             }
         }
+
+        stage('Remove Old Docker Images') {
+            steps {
+                sh '''
+                    echo "Removing old Docker images if exist..."
+
+                    docker images | grep "${IMAGE_NAME}" || true
+
+                    docker rmi -f ${IMAGE_NAME}:${IMAGE_TAG} || true
+
+                    docker image prune -f || true
+
+                    echo "Old Docker image cleanup completed!"
+                '''
+            }
+        }
+
         stage('Docker Build & Push') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh ''' 
-                        echo "Building Docker image..."
-                        docker build --no-cache -t karthikn16/bms:latest -f bookmyshow-app/Dockerfile bookmyshow-app
+                    withDockerRegistry(credentialsId: 'docker') {
+                        sh '''
+                            echo "Checking Docker Version..."
+                            docker version
 
-                        echo "Pushing Docker image to registry..."
-                        docker push karthikn16/bms:latest
+                            echo "Building Docker Image..."
+                            docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} -f bookmyshow-app/Dockerfile bookmyshow-app
+
+                            echo "Pushing Docker Image..."
+                            docker push ${IMAGE_NAME}:${IMAGE_TAG}
                         '''
                     }
                 }
             }
         }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                    echo "Running Trivy Image Scan..."
+                    trivy image ${IMAGE_NAME}:${IMAGE_TAG} --scanners vuln --format table > trivyimage.txt
+                    echo "Trivy Image Scan Completed!"
+                '''
+            }
+        }
+
         stage('Deploy to Container') {
             steps {
-                sh ''' 
-                echo "Stopping and removing old container..."
-                docker stop bms || true
-                docker rm bms || true
+                sh '''
+                    echo "Stopping old container..."
+                    docker stop ${CONTAINER_NAME} || true
 
-                echo "Running new container on port 3000..."
-                docker run -d --restart=always --name bms -p 3000:3000 karthikn16/bms:latest
+                    echo "Removing old container..."
+                    docker rm ${CONTAINER_NAME} || true
 
-                echo "Checking running containers..."
-                docker ps -a
+                    echo "Starting new container..."
+                    docker run -d --restart=always --name ${CONTAINER_NAME} -p 3000:3000 ${IMAGE_NAME}:${IMAGE_TAG}
 
-                echo "Fetching logs..."
-                sleep 5  # Give time for the app to start
-                docker logs bms
+                    echo "Checking running containers..."
+                    docker ps -a
+
+                    echo "Fetching logs..."
+                    sleep 5
+                    docker logs ${CONTAINER_NAME}
                 '''
             }
         }
     }
+
     post {
         always {
             emailext attachLog: true,
-                subject: "'${currentBuild.result}'",
-                body: "Project: ${env.JOB_NAME}<br/>" +
-                      "Build Number: ${env.BUILD_NUMBER}<br/>" +
-                      "URL: ${env.BUILD_URL}<br/>",
+                subject: "Build Status: ${currentBuild.result}",
+                body: """
+                    Project: ${env.JOB_NAME}<br/>
+                    Build Number: ${env.BUILD_NUMBER}<br/>
+                    URL: ${env.BUILD_URL}<br/>
+                    Status: ${currentBuild.result}<br/>
+                """,
                 to: 'karthikeyanak16@gmail.com',
                 attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
         }
