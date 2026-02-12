@@ -133,7 +133,7 @@ eksctl create nodegroup --cluster=karthi-eks \
                        --nodes-max=4 \
                        --node-volume-size=20 \
                        --ssh-access \
-                       --ssh-public-key=Kastro \
+                       --ssh-public-key=karthi \
                        --managed \
                        --asg-access \
                        --external-dns-access \
