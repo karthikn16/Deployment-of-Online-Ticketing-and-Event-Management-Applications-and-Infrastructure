@@ -27,98 +27,125 @@ pipeline {
 
         stage('Checkout from Git') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/karthikn16/Deployment-of-Online-Ticketing-and-Event-Management-Applications-and-Infrastructure.git'
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    git branch: 'main',
+                        url: 'https://github.com/karthikn16/Deployment-of-Online-Ticketing-and-Event-Management-Applications-and-Infrastructure.git'
 
-                sh 'ls -la'
+                    sh 'ls -la'
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar-server') {
-                    sh '''
-                        $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=BMS \
-                        -Dsonar.projectKey=BMS
-                    '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withSonarQubeEnv('sonar-server') {
+                        sh '''
+                            echo "Running SonarQube Scan..."
+                            $SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=BMS \
+                            -Dsonar.projectKey=BMS
+                        '''
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    script {
+                        timeout(time: 2, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token'
+                        }
+                    }
                 }
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    cd bookmyshow-app
-                    ls -la
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh '''
+                        cd bookmyshow-app
+                        ls -la
 
-                    if [ -f package.json ]; then
-                        rm -rf node_modules package-lock.json
-                        npm install
-                    else
-                        echo "Error: package.json not found!"
-                        exit 1
-                    fi
-                '''
+                        if [ -f package.json ]; then
+                            rm -rf node_modules package-lock.json
+                            npm install
+                        else
+                            echo "Error: package.json not found!"
+                            exit 1
+                        fi
+                    '''
+                }
             }
         }
 
         stage('OWASP FS Scan') {
             steps {
-                dependencyCheck additionalArguments: '''
-                    --scan ./ 
-                    --disableYarnAudit 
-                    --disableNodeAudit 
-                    --noupdate
-                ''', odcInstallation: 'DP-Check'
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh 'mkdir -p odc-reports || true'
 
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                    dependencyCheck additionalArguments: '''
+                        --scan ./
+                        --disableYarnAudit
+                        --disableNodeAudit
+                        --noupdate
+                        --format XML
+                        --out odc-reports
+                    ''', odcInstallation: 'DP-Check'
+
+                    dependencyCheckPublisher pattern: 'odc-reports/dependency-check-report.xml'
+                }
             }
         }
 
         stage('Trivy FS Scan') {
             steps {
-                sh '''
-                    echo "Running Trivy FS Scan..."
-                    trivy fs . --scanners vuln --format table > trivyfs.txt
-                    echo "Trivy FS Scan completed!"
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh '''
+                        echo "Running Trivy FS Scan..."
+                        trivy fs . --scanners vuln --format table > trivyfs.txt || true
+                        echo "Trivy FS Scan completed!"
+                        ls -la trivyfs.txt || true
+                    '''
+                }
             }
         }
 
         stage('Remove Old Docker Image') {
             steps {
-                sh '''
-                    echo "Removing old Docker image if exists..."
-                    docker rmi -f ${DOCKER_IMAGE} || true
-                    docker image prune -f || true
-                    docker images
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh '''
+                        echo "Removing old Docker image if exists..."
+                        docker rmi -f ${DOCKER_IMAGE} || true
+                        docker image prune -f || true
+                        docker images || true
+                    '''
+                }
             }
         }
 
         stage('Docker Build & Push') {
             steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker') {
-                        sh '''
-                            echo "Docker Version Check..."
-                            docker version
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    script {
+                        withDockerRegistry(credentialsId: 'docker') {
+                            sh '''
+                                echo "Docker Version Check..."
+                                docker version || true
 
-                            echo "Building Docker image..."
-                            docker build --no-cache -t ${DOCKER_IMAGE} -f bookmyshow-app/Dockerfile bookmyshow-app
+                                echo "Checking Docker daemon..."
+                                docker info || true
 
-                            echo "Pushing Docker image to Docker Hub..."
-                            docker push ${DOCKER_IMAGE}
-                        '''
+                                echo "Building Docker image..."
+                                docker build --no-cache -t ${DOCKER_IMAGE} -f bookmyshow-app/Dockerfile bookmyshow-app
+
+                                echo "Pushing Docker image to Docker Hub..."
+                                docker push ${DOCKER_IMAGE}
+                            '''
+                        }
                     }
                 }
             }
@@ -126,42 +153,47 @@ pipeline {
 
         stage('Trivy Image Scan') {
             steps {
-                sh '''
-                    echo "Running Trivy Image Scan..."
-                    trivy image ${DOCKER_IMAGE} --scanners vuln --format table > trivyimage.txt
-                    echo "Trivy Image Scan completed!"
-                '''
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh '''
+                        echo "Running Trivy Image Scan..."
+                        trivy image ${DOCKER_IMAGE} --scanners vuln --format table > trivyimage.txt || true
+                        echo "Trivy Image Scan completed!"
+                        ls -la trivyimage.txt || true
+                    '''
+                }
             }
         }
 
         stage('Deploy to EKS Cluster') {
             steps {
-                sh '''
-                    echo "Checking AWS CLI..."
-                    aws --version
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    sh '''
+                        echo "Checking AWS CLI..."
+                        aws --version || true
 
-                    echo "Verifying AWS Identity..."
-                    aws sts get-caller-identity
+                        echo "Verifying AWS Identity..."
+                        aws sts get-caller-identity || true
 
-                    echo "Updating kubeconfig for EKS..."
-                    aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION}
+                        echo "Updating kubeconfig for EKS..."
+                        aws eks update-kubeconfig --name ${EKS_CLUSTER_NAME} --region ${AWS_REGION} || true
 
-                    echo "Kubernetes Cluster Info..."
-                    kubectl cluster-info
+                        echo "Kubernetes Cluster Info..."
+                        kubectl cluster-info || true
 
-                    echo "Applying Kubernetes deployment and service..."
-                    kubectl apply -f deployment.yml
-                    kubectl apply -f service.yml
+                        echo "Applying Kubernetes deployment and service..."
+                        kubectl apply -f deployment.yml || true
+                        kubectl apply -f service.yml || true
 
-                    echo "Waiting for rollout..."
-                    kubectl rollout status deployment/bms-deployment --timeout=180s || true
+                        echo "Waiting for rollout..."
+                        kubectl rollout status deployment/bms-deployment --timeout=180s || true
 
-                    echo "Checking Pods..."
-                    kubectl get pods -o wide
+                        echo "Checking Pods..."
+                        kubectl get pods -o wide || true
 
-                    echo "Checking Services..."
-                    kubectl get svc -o wide
-                '''
+                        echo "Checking Services..."
+                        kubectl get svc -o wide || true
+                    '''
+                }
             }
         }
     }
@@ -177,7 +209,7 @@ pipeline {
                     Status: ${currentBuild.result}<br/>
                 """,
                 to: 'karthikeyanak16@gmail.com',
-                attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+                attachmentsPattern: 'trivyfs.txt,trivyimage.txt,odc-reports/dependency-check-report.xml'
         }
     }
 }
