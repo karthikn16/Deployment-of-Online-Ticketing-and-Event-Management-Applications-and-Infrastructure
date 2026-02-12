@@ -100,7 +100,7 @@ eksctl version
 1.3.4. Create EKS Cluster
 Execute the below commands as separate set
 (a)
-eksctl create cluster --name=kastro-eks \
+eksctl create cluster --name=karthi-eks \
                       --region=us-east-1 \
                       --zones=us-east-1a,us-east-1b \
                       --version=1.30 \
