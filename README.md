@@ -17,6 +17,7 @@ Business Goals:
 
 ###########################################################3
 Current Challenges:
+
 ● Complex Builds: Managing dependencies and incremental builds is difficult.
 ● Manual Testing: Testing multiple components manually is time-consuming.
 ● Infrastructure Setup: Manual server provisioning and configuration delays deployments.
