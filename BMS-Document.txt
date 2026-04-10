@@ -41,6 +41,7 @@ Secure Mail Transfer Protocol over SSL/TLS. Used for sending emails securely via
 Custom TCP         TCP           30000-32767
 Kubernetes NodePort service range.
 =============================
+
 1.2. Creation of EKS Cluster
 =============================
 1.2.1. Creation of IAM user (To create EKS Cluster, its not recommended to create using Root Account)
@@ -83,7 +84,6 @@ aws configure
 Configure aws by executing below command
 aws configure 
 
-
 1.3.2. Install KubeCTL (to interact with K8S)
 curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.19.6/2021-01-05/bin/linux/amd64/kubectl
 chmod +x ./kubectl
@@ -122,6 +122,7 @@ Without this, Pods in EKS clusters would require node-level IAM roles, which gra
 Without this, these services will not be able to access AWS resources securely.
 
 (c)
+
 Before executing the below command, in the 'ssh-public-key' keep the  '<PEM FILE NAME>' (dont give .pem. Just give the pem file name) which was used to create Jenkins Server
 
 eksctl create nodegroup --cluster=karthi-eks \
@@ -145,7 +146,6 @@ It will take 5-10 minutes
 
 (d) For internal communication b/w control plane and worker nodes, open 'all traffic' in the security group of EKS Cluster
 
-
 ************************************
 Step 2: Tools Installation
 ************************************
@@ -153,6 +153,7 @@ Step 2: Tools Installation
 2.1.1 Connect to the Jenkins Server
 =============================
 vi Jenkins.sh ----> Paste the below content ---->
+
 #!/bin/bash
 
 # Install OpenJDK 17 JRE Headless
