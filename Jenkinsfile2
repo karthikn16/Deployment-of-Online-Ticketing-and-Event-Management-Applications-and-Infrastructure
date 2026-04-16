@@ -28,7 +28,7 @@ pipeline {
         stage('Checkout from Git') {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    git branch: 'main',
+                    git branch: 'master',
                         url: 'https://github.com/karthikn16/Deployment-of-Online-Ticketing-and-Event-Management-Applications-and-Infrastructure.git'
 
                     sh 'ls -la'
