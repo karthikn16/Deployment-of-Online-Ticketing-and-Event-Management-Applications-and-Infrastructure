@@ -5,7 +5,6 @@ pipeline {
         jdk 'jdk17'
         nodejs 'node23'
     }
-
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
         IMAGE_NAME   = "karthikn16/bms"
